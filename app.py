@@ -10,31 +10,32 @@ st.caption("Avtor: @blazerculj-max | Vir podatkov: ZDoh-2 in napovedi za 2026")
 # --- STRANSKA VRSTICA ZA VNOS ---
 st.sidebar.header("Vnosni podatki")
 pok_mesecna = st.sidebar.number_input("Mesečna pokojnina (ZPIZ) [€]", min_value=0.0, value=1500.0, step=50.0)
-renta_mesecna = st.sidebar.number_input("Mesečna renta (2. steber) [€]", min_value=0.0, value=100.0, step=10.0)
 
 st.sidebar.divider()
-st.sidebar.subheader("Nastavitve olajšav")
+st.sidebar.subheader("Dodatna renta (2. steber)")
+vrsta_izplacila = st.sidebar.radio("Način izplačila rente:", ["Mesečna renta", "Enkratni odkup"])
+
+if vrsta_izplacila == "Mesečna renta":
+    renta_znesek = st.sidebar.number_input("Mesečni znesek rente [€]", min_value=0.0, value=200.0, step=10.0)
+    renta_letna = renta_znesek * 12
+else:
+    renta_letna = st.sidebar.number_input("Celotni znesek odkupa [€]", min_value=0.0, value=5000.0, step=100.0)
+    renta_znesek = 0 # Ni mesečnega zneska
+
+st.sidebar.divider()
 splosna_olajsava = st.sidebar.number_input("Splošna olajšava (letna) [€]", value=5551.93)
-st.sidebar.info("Standardna splošna olajšava za leto 2026.")
 
 # --- IZRAČUN ---
-def izracunaj_dohodnino(pok, renta, splosna):
-    # Letni zneski
-    pok_letna = pok * 12
-    renta_letna = renta * 12
+def izracunaj_dohodnino(pok_m, r_letna, r_mesecna, splosna, tip):
+    pok_letna = pok_m * 12
     
-    # 50% rente v osnovo (ZDoh-2)
-    renta_v_osnovi = renta_letna * 0.5
+    # 50% rente gre v davčno osnovo
+    renta_v_osnovi = r_letna * 0.5
     bruto_osnova = pok_letna + renta_v_osnovi
-    
-    # Neto davčna osnova
     neto_osnova = max(0.0, bruto_osnova - splosna)
     
-    # Lestvica 2026 (vsi razredi)
-    razredi = [
-        (9721.43, 0.16), (20177.30, 0.26), (35560.00, 0.33), (74160.00, 0.39), (float('inf'), 0.50)
-    ]
-    
+    # Lestvica 2026
+    razredi = [(9721.43, 0.16), (20177.30, 0.26), (35560.00, 0.33), (74160.00, 0.39), (float('inf'), 0.50)]
     odmerjena = 0.0
     preostanek = neto_osnova
     prejsnji_prag = 0.0
@@ -45,77 +46,75 @@ def izracunaj_dohodnino(pok, renta, splosna):
         preostanek -= v_razredu
         prejsnji_prag = prag
         
-    # Pokojninska olajšava (13,5%)
     pok_olajsava = pok_letna * 0.135
-    koncni_dolg = max(0.0, odmerjena - pok_olajsava)
+    koncni_letni_dolg = max(0.0, odmerjena - pok_olajsava)
     
-    # Izračun akontacije (25% od 50% rente, če je renta >= 160€)
-    if renta >= 160.0:
-        akontacija_mesecna = (renta * 0.5) * 0.25
-        renta_neto_mesecna = renta - akontacija_mesecna
-        je_akontacija = True
+    # LOGIKA AKONTACIJE
+    if tip == "Enkratni odkup":
+        # Pri enkratnem odkupu se vedno odtegne 25% od obdavčljive polovice
+        akontacija_skupna = renta_v_osnovi * 0.25
+        akontacija_prikaz = akontacija_skupna
+        neto_izplacilo = r_letna - akontacija_skupna
     else:
-        akontacija_mesecna = 0.0
-        renta_neto_mesecna = renta
-        je_akontacija = False
-    
-    akontacija_letna = akontacija_mesecna * 12
+        # Mesečna renta: akontacija le nad 160€
+        if r_mesecna >= 160.0:
+            akontacija_m = (r_mesecna * 0.5) * 0.25
+        else:
+            akontacija_m = 0.0
+        akontacija_skupna = akontacija_m * 12
+        akontacija_prikaz = akontacija_m
+        neto_izplacilo = r_mesecna - akontacija_m
     
     return {
         "pok_letna": pok_letna,
-        "renta_letna": renta_letna,
+        "renta_letna": r_letna,
         "renta_v_osnovi": renta_v_osnovi,
         "neto_osnova": neto_osnova,
         "odmerjena": odmerjena,
         "pok_olajsava": pok_olajsava,
-        "koncni_dolg": koncni_dolg,
-        "akontacija_mesecna": akontacija_mesecna,
-        "akontacija_letna": akontacija_letna,
-        "renta_neto_mesecna": renta_neto_mesecna,
-        "je_akontacija": je_akontacija,
-        "poracun": koncni_dolg - akontacija_letna
+        "koncni_dolg": koncni_letni_dolg,
+        "akontacija_prikaz": akontacija_prikaz,
+        "akontacija_skupna": akontacija_skupna,
+        "neto_izplacilo": neto_osnova, # Za izračun poračuna
+        "realno_neto": neto_izplacilo,
+        "poracun": koncni_letni_dolg - akontacija_skupna
     }
 
-rez = izracunaj_dohodnino(pok_mesecna, renta_mesecna, splosna_olajsava)
+rez = izracunaj_dohodnino(pok_mesecna, renta_letna, renta_znesek, splosna_olajsava, vrsta_izplacila)
 
 # --- PRIKAZ REZULTATOV ---
 c1, c2, c3 = st.columns(3)
 with c1:
-    st.metric("Letni dolg dohodnine", f"{rez['koncni_dolg']:,.2f} €")
+    st.metric("Dejanski letni dolg", f"{rez['koncni_dolg']:,.2f} €")
 with c2:
-    st.metric("Mesečna akontacija (odteg)", f"{rez['akontacija_mesecna']:,.2f} €", 
-              delta="- Akontacija" if rez['je_akontacija'] else None, delta_color="inverse")
+    label = "Plačana akontacija (enkratno)" if vrsta_izplacila == "Enkratni odkup" else "Mesečna akontacija (odteg)"
+    st.metric(label, f"{rez['akontacija_prikaz']:,.2f} €", delta_color="inverse")
 with c3:
-    st.metric("Neto nakazilo rente", f"{rez['renta_neto_mesecna']:,.2f} €")
+    label_neto = "Neto znesek odkupa" if vrsta_izplacila == "Enkratni odkup" else "Neto mesečna renta"
+    st.metric(label_neto, f"{rez['realno_neto']:,.2f} €")
 
 st.divider()
 
-# Opozorilo glede praga 160€
-if rez['je_akontacija']:
-    st.warning(f"⚠️ **Pozor:** Ker vaša renta znaša {renta_mesecna} € (nad mejo 160 €), vam zavarovalnica vsak mesec avtomatično odtegne **25 % akontacije dohodnine** od davčne osnove.")
+# Dinamično opozorilo
+if vrsta_izplacila == "Enkratni odkup":
+    st.warning(f"Pri enkratnem odkupu se takoj odtegne 25 % akontacije od polovice zneska ({rez['renta_v_osnovi']:,.2f} €), kar znaša **{rez['akontacija_skupna']:,.2f} €**.")
+elif renta_znesek >= 160:
+    st.warning(f"Mesečna renta presega 160 €, zato se sproti odteguje akontacija.")
 else:
-    st.info("ℹ️ Renta je pod pragom 160 €, zato se mesečna akontacija dohodnine ne odteguje.")
+    st.info("Renta je pod pragom 160 €, akontacija se mesečno ne trga.")
 
 # --- RAZPREDELNICA ---
-st.subheader("Podroben letni razrez")
-
-# Priprava vrstic za tabelo
 rows = [
     ["Bruto pokojnina (ZPIZ)", f"{rez['pok_letna']:,.2f} €"],
-    ["Bruto dodatna renta (2. steber)", f"{rez['renta_letna']:,.2f} €"],
-    ["Obdavčljivi del rente (50%)", f"{rez['renta_v_osnovi']:,.2f} €"],
-    ["SKUPAJ BRUTO OSNOVA", f"{rez['pok_letna'] + rez['renta_v_osnovi']:,.2f} €"],
+    ["Znesek dodatne rente / odkupa", f"{rez['renta_letna']:,.2f} €"],
+    ["Obdavčljivi del (50%)", f"{rez['renta_v_osnovi']:,.2f} €"],
     ["Splošna olajšava", f"-{splosna_olajsava:,.2f} €"],
     ["Neto davčna osnova", f"{rez['neto_osnova']:,.2f} €"],
     ["Odmerjena dohodnina", f"{rez['odmerjena']:,.2f} €"],
     ["Pokojninska olajšava (13,5%)", f"-{rez['pok_olajsava']:,.2f} €"],
-    ["KONČNI LETNI DOLG", f"{rez['koncni_dolg']:,.2f} €"]
+    ["KONČNI LETNI DOLG (FURS)", f"{rez['koncni_dolg']:,.2f} €"],
+    ["Že plačana akontacija", f"-{rez['akontacija_skupna']:,.2f} €"]
 ]
-
-# Če je akontacija prisotna, dodamo še ti dve vrstici za večjo jasnost
-if rez['je_akontacija']:
-    rows.insert(9, ["Mesečna odtegnjena akontacija", f"-{rez['akontacija_mesecna']:,.2f} €"])
-    rows.insert(10, ["Letna plačana akontacija", f"-{rez['akontacija_letna']:,.2f} €"])
 
 df_podatki = pd.DataFrame(rows, columns=["Postavka", "Znesek"])
 st.table(df_podatki)
@@ -123,8 +122,8 @@ st.table(df_podatki)
 # Poračun
 st.subheader("Poračun ob koncu leta")
 if rez['poracun'] > 0:
-    st.error(f"Ob koncu leta boste morali DOPLAČATI približno **{rez['poracun']:,.2f} €**.")
+    st.error(f"DOPLAČILO: Pri dohodninski napovedi boste morali doplačati še **{rez['poracun']:,.2f} €**.")
 elif rez['poracun'] < 0:
-    st.success(f"Ob koncu leta boste prejeli VRAČILO v višini približno **{abs(rez['poracun']):,.2f} €**.")
+    st.success(f"VRAČILO: FURS vam bo vrnil preveč plačano akontacijo v višini **{abs(rez['poracun']):,.2f} €**.")
 else:
-    st.info("Vaša dohodnina je v celoti pokrita z olajšavami ali akontacijami. Ni doplačila.")
+    st.info("Ni doplačila ali vračila.")
