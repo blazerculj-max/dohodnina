@@ -125,6 +125,6 @@ st.subheader("Poračun ob koncu leta")
 if rez['poracun'] > 0:
     st.error(f"DOPLAČILO: Pri dohodninski napovedi boste morali doplačati še **{rez['poracun']:,.2f} €**.")
 elif rez['poracun'] < 0:
-    st.success(f"VRAČILO: FURS vam bo vrnil preveč plačano akontacijo v višini **{abs(rez['poracun']:,.2f} €**.")
+    st.success(f"VRAČILO: FURS vam bo vrnil preveč plačano akontacijo v višini **{abs(rez['poracun']):,.2f} €**.")
 else:
     st.info("Ni večjih doplačil ali vračil.")
