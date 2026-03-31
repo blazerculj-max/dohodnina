@@ -1,0 +1,8 @@
+# Za tabelarični prikaz podatkov v terminalu (da bo pregledno kot v knjigi)
+tabulate==0.9.0
+
+# Za risanje grafov (npr. efektivna obdavčitev glede na višino pokojnine)
+matplotlib==3.8.0
+
+# Za morebitno delo s seznami davčnih razredov ali uvoz iz Excela
+pandas==2.1.0
