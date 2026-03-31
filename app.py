@@ -1,87 +1,113 @@
-def kalkulator_pokojnine_2026(pokojnina_mesecna, renta_mesecna):
-    """
-    Izračun dohodnine za upokojence v Sloveniji (vsi davčni razredi 2026).
-    Vključuje 50% olajšavo za rento iz 2. stebra in 13,5% pokojninsko olajšavo.
-    """
+import streamlit as st
+import pandas as pd
+
+# Nastavitve strani
+st.set_page_config(page_title="Davčni Kalkulator Pokojnin 2026", layout="wide")
+
+st.title("📊 Informativni izračun dohodnine za upokojence (2026)")
+st.caption("Avtor: @blazerculj-max | Vir podatkov: ZDoh-2 in napovedi za 2026")
+
+# --- STRANSKA VRSTICA ZA VNOS ---
+st.sidebar.header("Vnosni podatki")
+pok_mesecna = st.sidebar.number_input("Mesečna pokojnina (ZPIZ) [€]", min_value=0.0, value=1500.0, step=50.0)
+renta_mesecna = st.sidebar.number_input("Mesečna renta (2. steber) [€]", min_value=0.0, value=100.0, step=10.0)
+
+st.sidebar.divider()
+st.sidebar.subheader("Nastavitve olajšav")
+splosna_olajsava = st.sidebar.number_input("Splošna olajšava (letna) [€]", value=5551.93)
+st.sidebar.info("Standardna splošna olajšava za leto 2026.")
+
+# --- IZRAČUN ---
+def izracunaj_dohodnino(pok, renta, splosna):
+    # Letni zneski
+    pok_letna = pok * 12
+    renta_letna = renta * 12
     
-    # --- KONSTANTE ZA LETO 2026 (Predvideni pragovi) ---
-    SPLOSNA_OLASAVA = 5551.93
-    POKOJNINSKA_OL_STOPNJA = 0.135
-    PRAG_AKONTACIJE_RENTE = 160.0  # Meja, nad katero se trga 25% akontacija
+    # 50% rente v osnovo (ZDoh-2)
+    renta_v_osnovi = renta_letna * 0.5
+    bruto_osnova = pok_letna + renta_v_osnovi
     
-    # Lestvica: (zgornja meja razreda, davčna stopnja)
-    # Razredi so progresivni: 16%, 26%, 33%, 39%, 50%
-    LESTVICA = [
+    # Neto davčna osnova
+    neto_osnova = max(0.0, bruto_osnova - splosna)
+    
+    # Lestvica 2026 (vsi razredi)
+    razredi = [
         (9721.43, 0.16),
         (20177.30, 0.26),
         (35560.00, 0.33),
         (74160.00, 0.39),
         (float('inf'), 0.50)
     ]
-
-    # 1. LETNI BRUTO IN AKONTACIJE
-    pok_letna = pokojnina_mesecna * 12
-    renta_letna = renta_mesecna * 12
     
-    # Izračun mesečne akontacije rente (če je nad 160€)
-    akontacija_rente_mesecna = 0
-    if renta_mesecna >= PRAG_AKONTACIJE_RENTE:
-        # Akontacija se računa kot 25% od 50% bruto zneska
-        akontacija_rente_mesecna = (renta_mesecna * 0.50) * 0.25
+    odmerjena = 0.0
+    preostanek = neto_osnova
+    prejsnji_prag = 0.0
     
-    akontacija_rente_letna = akontacija_rente_mesecna * 12
-
-    # 2. DAVČNA OSNOVA
-    # Renta iz 2. stebra je obdavčena le 50% (ZDoh-2)
-    bruto_osnova = pok_letna + (renta_letna * 0.50)
-    neto_davcna_osnova = max(0, bruto_osnova - SPLOSNA_OLASAVA)
-
-    # 3. IZRAČUN ODMERJENE DOHODNINE (Progresivno čez vse razrede)
-    preostala_osnova = neto_davcna_osnova
-    odmerjena_dohodnina = 0
-    prejsnji_prag = 0
-    
-    for prag, stopnja in LESTVICA:
-        if preostala_osnova <= 0:
+    for prag, stopnja in razredi:
+        if preostanek <= 0:
             break
-        
-        sirina_razreda = prag - prejsnji_prag
-        obdavcljivo_v_razredu = min(preostala_osnova, sirina_razreda)
-        
-        odmerjena_dohodnina += obdavcljivo_v_razredu * stopnja
-        preostala_osnova -= obdavcljivo_v_razredu
+        v_razredu = min(preostanek, prag - prejsnji_prag)
+        odmerjena += v_razredu * stopnja
+        preostanek -= v_razredu
         prejsnji_prag = prag
-
-    # 4. POKOJNINSKA OLAJŠAVA (13,5% od pokojnine ZPIZ)
-    pok_olajsava = pok_letna * POKOJNINSKA_OL_STOPNJA
+        
+    # Pokojninska olajšava (13,5%)
+    pok_olajsava = pok_letna * 0.135
+    koncni_dolg = max(0.0, odmerjena - pok_olajsava)
     
-    # Končni letni dolg (ne more biti manj kot 0)
-    dejanska_letna_dohodnina = max(0, odmerjena_dohodnina - pok_olajsava)
-
-    # 5. PORAČUN (Kaj pravi FURS ob koncu leta)
-    # Razlika med tem, kar bi moral plačati, in tem, kar je bilo že odtegnjeno
-    poracun = dejanska_letna_dohodnina - akontacija_rente_letna
-
-    # --- PODROBEN IZPIS ---
-    print(f"--- ANALIZA OBDAVČITVE ZA LETO 2026 ---")
-    print(f"Mesečna pokojnina: {pokojnina_mesecna:,.2f} € | Letna: {pok_letna:,.2f} €")
-    print(f"Mesečna renta:     {renta_mesecna:,.2f} € | Letna: {renta_letna:,.2f} €")
-    print(f"Mesečna akontacija (odtegljaj): {akontacija_rente_mesecna:,.2f} €")
-    print("-" * 50)
-    print(f"Skupna davčna osnova (po olajšavi): {neto_davcna_osnova:,.2f} €")
-    print(f"Odmerjena dohodnina (pred olajšavo): {odmerjena_dohodnina:,.2f} €")
-    print(f"Pokojninska olajšava (13,5%):      -{pok_olajsava:,.2f} €")
-    print(f"Dejanski letni dolg dohodnine:      {dejanska_letna_dohodnina:,.2f} €")
-    print("-" * 50)
+    # Akontacija (trga se nad 160€ bruto rente)
+    # Akontacija je 25% od polovice rente
+    akontacija_mesecna = (renta * 0.5 * 0.25) if renta >= 160.0 else 0.0
     
-    if poracun > 0:
-        print(f"REZULTAT: DOPLAČILO FURS-u: {poracun:,.2f} €")
-    elif poracun < 0:
-        print(f"REZULTAT: VRAČILO DOHODNINE: {abs(poracun):,.2f} €")
-    else:
-        print(f"REZULTAT: Ni doplačila ali vračila.")
-    
-    print(f"Efektivna obdavčitev celotne rente: {(dejanska_letna_dohodnina/renta_letna)*100 if renta_letna > 0 else 0:.2f} %")
+    return {
+        "pok_letna": pok_letna,
+        "renta_letna": renta_letna,
+        "renta_v_osnovi": renta_v_osnovi,
+        "neto_osnova": neto_osnova,
+        "odmerjena": odmerjena,
+        "pok_olajsava": pok_olajsava,
+        "koncni_dolg": koncni_dolg,
+        "akontacija_mesecna": akontacija_mesecna,
+        "poracun": koncni_dolg - (akontacija_mesecna * 12)
+    }
 
-# Primer za visoko pokojnino, da se aktivirajo višji razredi:
-kalkulator_pokojnine_2026(pokojnina_mesecna=3000, renta_mesecna=500)
+rez = izracunaj_dohodnino(pok_mesecna, renta_mesecna, splosna_olajsava)
+
+# --- PRIKAZ REZULTATOV ---
+c1, c2, c3 = st.columns(3)
+with c1:
+    st.metric("Letni dolg dohodnine", f"{rez['koncni_dolg']:,.2f} €")
+with c2:
+    st.metric("Mesečna akontacija rente", f"{rez['akontacija_mesecna']:,.2f} €")
+with c3:
+    efektivni = (rez['koncni_dolg'] / rez['renta_letna'] * 100) if rez['renta_letna'] > 0 else 0
+    st.metric("Efektivna obdavčitev rente", f"{efektivni:.2f} %")
+
+st.divider()
+
+# Razlaga v obliki tabele
+st.subheader("Podroben letni razrez")
+data = {
+    "Postavka": ["Bruto pokojnina (ZPIZ)", "Bruto dodatna renta (2. steber)", "Obdavčljivi del rente (50%)", "SKUPAJ BRUTO OSNOVA", "Splošna olajšava", "Neto davčna osnova", "Odmerjena dohodnina (pred olajšavo)", "Pokojninska olajšava (13,5%)", "KONČNI LETNI DOLG"],
+    "Znesek [€]": [
+        f"{rez['pok_letna']:,.2f}",
+        f"{rez['renta_letna']:,.2f}",
+        f"{rez['renta_v_osnovi']:,.2f}",
+        f"{rez['pok_letna'] + rez['renta_v_osnovi']:,.2f}",
+        f"-{splosna_olajsava:,.2f}",
+        f"{rez['neto_osnova']:,.2f}",
+        f"{rez['odmerjena']:,.2f}",
+        f"-{rez['pok_olajsava']:,.2f}",
+        f"{rez['koncni_dolg']:,.2f}"
+    ]
+}
+st.table(pd.DataFrame(data))
+
+# Poračun
+st.subheader("Poračun ob koncu leta")
+if rez['poracun'] > 0:
+    st.warning(f"Ob koncu leta boste morali DOPLAČATI približno **{rez['poracun']:,.2f} €**.")
+elif rez['poracun'] < 0:
+    st.success(f"Ob koncu leta boste prejeli VRAČILO v višini približno **{abs(rez['poracun']):,.2f} €**.")
+else:
+    st.info("Vaša dohodnina je v celoti pokrita z olajšavami. Ni doplačila.")
